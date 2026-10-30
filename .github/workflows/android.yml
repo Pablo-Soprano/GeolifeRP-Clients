@@ -16,17 +16,23 @@ jobs:
           echo "PROJ=$(cd "$(dirname "$GR")" && pwd)" >> "$GITHUB_ENV"
 
       - name: Fix include case and paths
-        run: python3 "$GITHUB_WORKSPACE/fix_includes.py" "$PROJ/app/src/main/cpp"
+        run: python3 "$GITHUB_WORKSPACE/fix_includes.py" "$PROJ/app/src/main/cpp" | tee "$GITHUB_WORKSPACE/fix.log"
 
-      - name: Add forward declarations
+      - name: Fix CQuaternion
         run: |
-          F="$(find "$PROJ/app/src/main/cpp" -name Matrix.h | head -1)"
-          if ! grep -q '^class CQuaternion;' "$F"; then sed -i '1i class CQuaternion;' "$F"; fi
+          QH="$(grep -rlE '^(class|struct) CQuaternion\b[^;]*$' "$PROJ/app/src/main/cpp" --include=*.h --include=*.hpp | head -1)"
+          echo "CQuaternion defined in: $QH"
+          find "$PROJ/app/src/main/cpp" -name Matrix.h | while read F; do
+            if [ -n "$QH" ]; then
+              grep -q "AUTOFIX_QUAT" "$F" || sed -i "1i #include \"$QH\" // AUTOFIX_QUAT" "$F"
+            else
+              grep -q '^class CQuaternion;' "$F" || sed -i '1i class CQuaternion;' "$F"
+            fi
+          done
 
       - name: Create opus version.h
         run: |
           F="$(find "$PROJ/app/src/main/cpp" -path '*opus/celt/config.h' | head -1)"
-          echo "opus config.h: $F"
           if [ -n "$F" ]; then
             D="$(dirname "$F")"
             if [ ! -e "$D/version.h" ]; then
@@ -48,7 +54,13 @@ jobs:
           ./gradlew assembleDebug --stacktrace > "$GITHUB_WORKSPACE/build.log" 2>&1 || {
             echo "=========== ERRORS ==========="
             grep -E "error:|fatal error|undefined reference|undefined symbol" "$GITHUB_WORKSPACE/build.log" | sed 's#.*/app/src/main/cpp/##' | sort -u | head -40
-            echo "=========== END ERRORS ==========="
+            echo "=========== MISSING INCLUDES ==========="
+            grep MISSING "$GITHUB_WORKSPACE/fix.log" | head -30
+            echo "=========== DIAG ==========="
+            find "$PROJ" -name Matrix.h -not -path '*/build/*' | sed 's#.*/app/src/main/cpp/##'
+            find "$PROJ" -iname 'sigproc*' -not -path '*/build/*' | sed 's#.*/app/src/main/cpp/##' | head
+            grep -rn "CQuaternion" "$PROJ/app/src/main/cpp" --include=*.h -l | sed 's#.*/app/src/main/cpp/##' | head -15
+            echo "=========== END ==========="
             exit 1
           }
 
