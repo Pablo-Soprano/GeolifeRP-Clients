@@ -1,0 +1,32 @@
+name: Diag
+on: [workflow_dispatch, push]
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Print info
+        run: |
+          ZIP="$(ls *.zip 2>/dev/null | head -1 || true)"
+          if [ -n "$ZIP" ]; then unzip -q -o "$ZIP"; fi
+          GR="$(find . -name gradlew -not -path './.git/*' | head -1)"
+          C="$(cd "$(dirname "$GR")" && pwd)/app/src/main/cpp"
+          cd "$C"
+          {
+            echo "=== Matrix.h files ==="
+            find . -name Matrix.h -exec ls -l {} \;
+            echo "=== Quaternion files ==="
+            find . -iname 'Quaternion*' -exec ls -l {} \;
+            echo "=== Core/Matrix.h head ==="
+            grep -n -E '#include|#pragma|#ifndef|#define|class |struct ' samp/game/Core/Matrix.h | head -12
+            echo "=== samp/Matrix.h head ==="
+            grep -n -E '#include|#pragma|#ifndef|#define|class |struct ' samp/Matrix.h | head -12
+            echo "=== Core/Quaternion.h head ==="
+            grep -n -E '#include|#pragma|#ifndef|class |struct ' samp/game/Core/Quaternion.h | head -8
+            echo "=== CPhysical.h includes ==="
+            grep -n '#include' samp/game/Entity/CPhysical.h | head -10
+            echo "=== CMake include dirs ==="
+            find . -maxdepth 2 -name CMakeLists.txt
+            grep -rn -E 'include_directories' --include=CMakeLists.txt . | head -12
+          } 2>&1 | head -90
