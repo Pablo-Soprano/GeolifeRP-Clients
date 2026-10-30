@@ -23,6 +23,18 @@ jobs:
           F="$(find "$PROJ/app/src/main/cpp" -name Matrix.h | head -1)"
           if ! grep -q '^class CQuaternion;' "$F"; then sed -i '1i class CQuaternion;' "$F"; fi
 
+      - name: Create opus version.h
+        run: |
+          F="$(find "$PROJ/app/src/main/cpp" -path '*opus/celt/config.h' | head -1)"
+          echo "opus config.h: $F"
+          if [ -n "$F" ]; then
+            D="$(dirname "$F")"
+            if [ ! -e "$D/version.h" ]; then
+              V="$(find "$PROJ" -name version.h -not -path '*/build/*' | head -1)"
+              if [ -n "$V" ]; then cp "$V" "$D/version.h"; else printf '#ifndef PACKAGE_VERSION\n#define PACKAGE_VERSION "1.3.1"\n#endif\n' > "$D/version.h"; fi
+            fi
+          fi
+
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
