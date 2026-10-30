@@ -1,5 +1,5 @@
-      - name: Fix include case and paths
-        run: |
+            - name: Fix include case and paths
+        run: python3 fix_includes.py "$GITHUB_WORKSPACE/app/src/main/cpp"
           cat > fix_includes.py <<'PY'
           import os, re, sys
           root = os.path.abspath(sys.argv[1])
