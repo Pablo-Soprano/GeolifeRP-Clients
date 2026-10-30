@@ -18,6 +18,13 @@ jobs:
       - name: Fix include case and paths
         run: python3 "$GITHUB_WORKSPACE/fix_includes.py" "$PROJ/app/src/main/cpp"
 
+      - name: Add forward declarations
+        run: |
+          F="$(find "$PROJ/app/src/main/cpp" -name Matrix.h | head -1)"
+          echo "Matrix.h: $F"
+          if ! grep -q '^class CQuaternion;' "$F"; then sed -i '1i class CQuaternion;' "$F"; fi
+          head -3 "$F"
+
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
