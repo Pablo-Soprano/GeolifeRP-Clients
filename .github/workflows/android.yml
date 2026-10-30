@@ -1,48 +1,37 @@
-            - name: Fix include case and paths
-        run: python3 fix_includes.py "$GITHUB_WORKSPACE/app/src/main/cpp"
-          cat > fix_includes.py <<'PY'
-          import os, re, sys
-          root = os.path.abspath(sys.argv[1])
-          files = {}
-          for r, d, f in os.walk(root):
-              d[:] = [x for x in d if x not in ('.git', 'build', '.cxx')]
-              for x in f:
-                  files[os.path.join(r, x)] = None
-          exts = ('.h', '.hpp', '.hh', '.inl', '.c', '.cc', '.cpp', '.cxx')
-          low = {}
-          for p in files:
-              low.setdefault(p.lower(), p)
-          made = 0
-          missing = set()
-          for p in list(files):
-              if not p.endswith(exts): continue
-              base = os.path.dirname(p)
-              try: lines = open(p, errors='ignore').read().splitlines()
-              except Exception: continue
-              for l in lines:
-                  m = re.match(r'\s*#\s*include\s+"([^"]+)"', l)
-                  if not m: continue
-                  inc = m.group(1)
-                  roots = []
-                  b = base
-                  while True:
-                      roots.append(b)
-                      if b == root: break
-                      b = os.path.dirname(b)
-                  if any(os.path.exists(os.path.join(b, inc)) for b in roots): continue
-                  suffix = '/' + inc.replace('\\', '/').lower()
-                  hits = [v for k, v in low.items() if k.endswith(suffix)]
-                  if not hits:
-                      missing.add(inc); continue
-                  target = sorted(hits)[0]
-                  for b in roots:
-                      dest = os.path.join(b, inc)
-                      if os.path.lexists(dest): continue
-                      os.makedirs(os.path.dirname(dest), exist_ok=True)
-                      try:
-                          os.symlink(target, dest); made += 1
-                      except OSError: pass
-          print('links created:', made)
-          for m in sorted(missing): print('MISSING FILE:', m)
-          PY
-          python3 fix_includes.py "$GITHUB_WORKSPACE/app/src/main/cpp"
+name: Build GeoLifeRP APK
+on: [workflow_dispatch, push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Project ZIP
+        run: |
+          ZIP="$(ls *.zip 2>/dev/null | head -1 || true)"
+          if [ -n "$ZIP" ]; then unzip -q -o "$ZIP"; fi
+          GR="$(find . -name gradlew -not -path './.git/*' | head -1)"
+          echo "gradlew: $GR"
+          echo "PROJ=$(cd "$(dirname "$GR")" && pwd)" >> "$GITHUB_ENV"
+
+      - name: Fix include case and paths
+        run: python3 "$GITHUB_WORKSPACE/fix_includes.py" "$PROJ/app/src/main/cpp"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build Debug APK
+        run: |
+          cd "$PROJ"
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeoLifeRP-client-apk
+          path: "**/build/outputs/apk/debug/*.apk"
