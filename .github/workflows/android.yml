@@ -11,16 +11,19 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Extract Project ZIP
+    - name: Create Case-Insensitive Workspace
       run: |
+        sudo dd if=/dev/zero of=workspace.img bs=1M count=4096
+        sudo mkfs.vfat -F 32 workspace.img
+        mkdir -p ci-workspace
+        sudo mount -o loop,uid=$(id -u),gid=$(id -g) workspace.img ci-workspace
+        cp -r ./* ci-workspace/ || true
+
+    - name: Extract and Move Project
+      run: |
+        cd ci-workspace
         unzip SAMP-Mobile-GTA-2.11.zip
         mv SAMP-Mobile-GTA-2.11/* . || true
-
-    - name: Fix Case Sensitivity
-      run: |
-        git config --global core.ignorecase true
-        find . -type d -name "*amp_widgets*" -exec mv {} samp_widgets \; 2>/dev/null || true
-        find . -type f -name "*layerTabList*" -exec mv {} playerTabList.h \; 2>/dev/null || true
 
     - name: Set up JDK 17
       uses: actions/setup-java@v3
@@ -29,14 +32,24 @@ jobs:
         java-version: '17'
 
     - name: Change wrapper permissions
-      run: chmod +x gradlew
+      run: |
+        cd ci-workspace
+        chmod +x gradlew
 
     - name: Build Debug APK
-      run: ./gradlew assembleDebug --continue || ./gradlew assembleDebug
+      run: |
+        cd ci-workspace
+        ./gradlew assembleDebug
 
+    - name: Copy and Upload APK Artifact
+      if: always()
+      run: |
+        mkdir -p output-apk
+        cp ci-workspace/app/build/outputs/apk/debug/*.apk output-apk/ || true
+      
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: GeoLifeRP-Mobile-Client
-        path: app/build/outputs/apk/debug/*.apk
+        path: output-apk/*.apk
         
