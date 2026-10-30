@@ -21,9 +21,7 @@ jobs:
       - name: Add forward declarations
         run: |
           F="$(find "$PROJ/app/src/main/cpp" -name Matrix.h | head -1)"
-          echo "Matrix.h: $F"
           if ! grep -q '^class CQuaternion;' "$F"; then sed -i '1i class CQuaternion;' "$F"; fi
-          head -3 "$F"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -35,7 +33,12 @@ jobs:
         run: |
           cd "$PROJ"
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --stacktrace > "$GITHUB_WORKSPACE/build.log" 2>&1 || {
+            echo "=========== ERRORS ==========="
+            grep -E "error:|fatal error|undefined reference|undefined symbol" "$GITHUB_WORKSPACE/build.log" | sed 's#.*/app/src/main/cpp/##' | sort -u | head -40
+            echo "=========== END ERRORS ==========="
+            exit 1
+          }
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
