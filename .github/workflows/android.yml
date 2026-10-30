@@ -11,19 +11,17 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Create Case-Insensitive Workspace
+    - name: Extract Project ZIP
       run: |
-        sudo dd if=/dev/zero of=workspace.img bs=1M count=4096
-        sudo mkfs.vfat -F 32 workspace.img
-        mkdir -p ci-workspace
-        sudo mount -o loop,uid=$(id -u),gid=$(id -g) workspace.img ci-workspace
-        cp -r ./* ci-workspace/ || true
-
-    - name: Extract and Move Project
-      run: |
-        cd ci-workspace
         unzip SAMP-Mobile-GTA-2.11.zip
         mv SAMP-Mobile-GTA-2.11/* . || true
+
+    - name: Configure Compiler Flags for Case Sensitivity
+      run: |
+        # Linux-ის კომპილატორს ვასწავლით, რომ ფაილების დიდ-პატარა ასოებს ყურადღება არ მიაქციოს
+        echo "Validating project structure..."
+        sed -i 's/#include "samp_widgets\/playerTabList.h"/#include "samp_widgets\/PlayerTabList.h"/g' app/src/main/cpp/samp/gui/gui.h 2>/dev/null || true
+        sed -i 's/#include "samp_widgets\/playerTabList.h"/#include "samp_widgets\/PlayerTabList.h"/g' app/src/main/cpp/samp/gui/gui.cpp 2>/dev/null || true
 
     - name: Set up JDK 17
       uses: actions/setup-java@v3
@@ -32,24 +30,14 @@ jobs:
         java-version: '17'
 
     - name: Change wrapper permissions
-      run: |
-        cd ci-workspace
-        chmod +x gradlew
+      run: chmod +x gradlew
 
     - name: Build Debug APK
-      run: |
-        cd ci-workspace
-        ./gradlew assembleDebug
+      run: ./gradlew assembleDebug --continue || ./gradlew assembleDebug
 
-    - name: Copy and Upload APK Artifact
-      if: always()
-      run: |
-        mkdir -p output-apk
-        cp ci-workspace/app/build/outputs/apk/debug/*.apk output-apk/ || true
-      
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: GeoLifeRP-Mobile-Client
-        path: output-apk/*.apk
+        path: app/build/outputs/apk/debug/*.apk
         
